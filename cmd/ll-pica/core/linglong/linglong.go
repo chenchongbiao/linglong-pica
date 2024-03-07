@@ -19,10 +19,16 @@ import (
 
 type LinglongBuder struct {
 	Appid       string
+	Name        string
 	Version     string
 	Runtime     string
 	Rversion    string
 	Description string
+	Kind        string
+	Hash        string
+	Url         string
+	Configure   []string
+	Install     []string
 }
 
 type RuntimeJson struct {
@@ -66,7 +72,8 @@ func (ts *LinglongBuder) LoadRuntimeInfo(path string) bool {
 
 const LinglongBuilderTMPL = `
 package:
-  id:  {{.Appid}}
+  id: {{.Appid}}
+  name: {{.Name}}
   version: {{.Version}}
   kind: app
   description: |
@@ -75,12 +82,37 @@ package:
 runtime:
   id: {{.Runtime}}
   version: {{.Rversion}}
-
+{{if eq .Kind "local"}}
 source:
   kind: local
-
+{{else}}
+source:
+  kind: file
+  url: {{.Url}}
+  digest: {{.Hash}}
+{{end}}
 build:
-  kind: pica
+  kind: manual
+  manual:
+    configure: |
+      # extract deb
+      ls *.deb | xargs -I {} dpkg -x {} workdir
+
+      #>>> auto generate by ll-pica begin
+      {{- range $line := .Configure}}
+        {{- printf "\n      %s" $line}}
+      {{- end}}
+      #>>> auto generate by ll-pica end
+
+    install: |
+      install -d $PREFIX/share
+      install -d $PREFIX/bin
+
+      #>>> auto generate by ll-pica begin
+      {{- range $line := .Install}}
+        {{- printf "\n      %s" $line}}
+      {{- end}}
+      #>>> auto generate by ll-pica end
 `
 
 // CreateLinglongYamlBuilder
@@ -153,7 +185,7 @@ func (ts *LinglongBuder) LinglongExport(path string) bool {
 		}
 	}
 	// caller ll-builder export --local
-	if ret, msg, err := comm.ExecAndWait(120, "ll-builder", "export", "--local"); err != nil {
+	if ret, msg, err := comm.ExecAndWait(120, "ll-builder", "export", path); err != nil {
 		log.Logger.Fatalf("ll-builder export failed: ", err, msg, ret)
 		return false
 	} else {
